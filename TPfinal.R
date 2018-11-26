@@ -27,7 +27,6 @@ rm(list = ls())
 require(ncdf4)
 require(ggplot2)
 require(maps)
-require(directlabels)
 require(ggpubr)
 require(metR)
 require(reshape)
@@ -39,6 +38,11 @@ temp_nc<-nc_open("Temp_dec2013.nc")
 #extraigo las variables 
 hgt<-ncvar_get(hgt_nc,"hgt")
 temp<-ncvar_get(temp_nc,"air")
+
+#Convierto los valores faltantes en NA (aunque no hay ninguno)
+hgt[hgt==32766]<-NA
+temp[temp==32766]<-NA
+
 
 #En una lista guardo las dimensiones de mis arrays, siendo que ambos tienen las mismas 
 nombres_dimensiones<-names(hgt_nc$dim)
@@ -59,39 +63,24 @@ niveles<-c(which(datos_dimensiones$level==1000),
            which(datos_dimensiones$level==850),
            which(datos_dimensiones$level==500))
 
-g<-hgt[,,niveles,]
-t<-temp[,,niveles,]
+hgtRen<-hgt[,,niveles,]
+tempRen<-temp[,,niveles,]
 
 #Creo un array vacio con las dimensiones de ambos arrays
-array<-array(0,c(21,33,3,124,2))
+array<-array(0,c(dim(hgt),2))
 
 #Lleno el array con los datos 
-array[,,,,1]=g
-array[,,,,2]=t
+array[,,,,1]=hgtRen
+array[,,,,2]=tempRen
 
 #Lo convierto en un vector para guardar en formato binario
-h<-as.vector(array)
+datos<-as.vector(array)
 
 #Creo el espacio
 zz<-file("Varibles","wb")
 
 #Guardo los datos
-writeBin(h,zz)
-
-
-bin<-readBin("Varibles",what ="numeric",n=515592 )
-
-array2<-array(bin,c(21,33,3,124,2))
-
-bin2<-array-array2
-max(bin2)
-min(bin2)
-which.max(bin2)
-which(bin2!=0)
-help("writeBin")
-
-#leerlo y meterlo en un nuevo array y restarle el viejo. tomar el maximo y minimo si es cero
-
+writeBin(datos,zz)
 
 
 #######################################################
@@ -106,7 +95,7 @@ datos_dimensiones$time<-tiempos
 #Graficar el campo medio mensual para los niveles 850,1000 y 500
 
 #Seteo los parametros de mapa y gradiente 
-mapa<-map_data("world2") #xlim=c(270,320), ylim=c(-70,10))
+mapa<-map_data("world2") 
 my_fill<-scale_fill_gradient(name=expression(" C°"),high  = "red", low = "royalblue")
 
 
@@ -137,7 +126,7 @@ for (i in c(1000,850,500)) {
   ggplot(data=df_temp,aes(x=x,y=y)) +
     geom_tile(aes(fill=z-273)) +
     my_fill +
-    geom_text_contour(aes(z=df_hgt$z),skip=1)+
+    geom_text_contour(aes(z=df_hgt$z),skip=1,stroke = 0.2)+
     stat_contour(data=df_hgt,aes(x=x,y=y,z=z),color="black",size=0.5,show.legend = TRUE) +
     geom_polygon(data=mapa,aes(x=long ,y=lat, group=group),fill=NA,color="black",size=0.2) +
     coord_fixed(1) +
@@ -147,84 +136,12 @@ for (i in c(1000,850,500)) {
     xlab("Longitud") + ylab("Latitud")
   
   #Guardo los graficos
-  ggsave(paste("Campo",i,".pdf"))
+  ggsave(paste("Campo",i,".pdf",sep=""))
   
   
 }
 
 
-
-
-
-
-
-ggplot(data=df_temp,aes(x=x,y=y)) +
-  geom_tile(aes(fill=z-273)) +
-  my_fill +
-  stat_contour(data=df_hgt,aes(x=x,y=y,z=z),color="black",size=0.5,show.legend = TRUE) +
-  geom_text_contour(aes(z=df_hgt$z),skip = 1,stroke = 0.1)+
-  geom_polygon(data=mapa,aes(x=long ,y=lat, group=group),fill=NA,color="black",size=0.2) +
-  coord_fixed(1) +
-  
-  xlim(270,330) + ylim(-70,10) +
-  ggtitle(paste("Campo de temperatura",i))
-
-
-
-
-
-seq(df2$z[1],df2$z[693],100)
-
-direct.label(p,list("bottom.pieces"))
-
-help("direct.label")
-
-temp_level
-
-temp_level_1000<-temp[,,1,]
-temp_level_850<-temp[,,3,]
-temp_level_500<-temp[,,6,]
-
-hgt_level_1000<-hgt[,,1,]
-hgt_level_850<-hgt[,,3,]
-hgt_level_500<-hgt[,,6,]
-
-#Calcular la media mensual, es decir sobre el tiempo (una par 1000 otra para 850, 500)
-media_temp_1000<-as.vector(apply(temp_level_1000,c(1,2),mean))
-media_temp_850<-as.vector(apply(temp_level_850,c(1,2),mean))
-media_temp_500<-as.vector(apply(temp_level_500,c(1,2),mean))
-
-media_hgt_1000<-as.vector(apply(hgt_level_1000,c(1,2),mean))
-media_hgt_850<-as.vector(apply(hgt_level_850,c(1,2),mean))
-media_hgt_500<-as.vector(apply(hgt_level_500,c(1,2),mean))
-
-#Acomodar datos en data frame 
-df1<-data.frame(x=rep(datos_dimensiones$lon,length(datos_dimensiones$lat)),
-                y=rep(datos_dimensiones$lat,each=length(datos_dimensiones$lon)),
-                z=matrix(media_temp_1000,nrow=(length(datos_dimensiones$lat)*length(datos_dimensiones$lon)),ncol=1))
-
-df2<-data.frame(x=rep(datos_dimensiones$lon,length(datos_dimensiones$lat)),
-                y=rep(datos_dimensiones$lat,each=length(datos_dimensiones$lon)),
-                z=matrix(media_hgt_1000,nrow=(length(datos_dimensiones$lat)*length(datos_dimensiones$lon)),ncol=1))
-
-  
-
-
-
-
-
-
-
-  help("direct.label")
-ggsave("campo.pdf")
-
-map1<-map_data("world")
-map1$long
-#buscar tonalidades
-colors()[grep("orange",colors())]
-
-my_fill<- scale_fill_gradientn(name=expression("C"),colours=rev(brewer.pal(11,"RdYlBu")),breaks=seq(270,320,2.5),limits=c(270,320))
-my_fill<-scale_fill_gradient(high  = "red", low = "royalblue")
 
 ###############################
 # item c
@@ -253,17 +170,16 @@ for(j in 1:4) {
                       y=rep(datos_dimensiones$lat,each=length(datos_dimensiones$lon)),
                       z=matrix(hgt2,nrow=(length(datos_dimensiones$lat)*length(datos_dimensiones$lon)),ncol=1))
   
-  #Grafico el campo de temperatura 
-  campo<-ggplot(data=data_temp,aes(x=x,y=y)) +
+  #Grafico 
+campo<-ggplot(data=data_temp,aes(x=x,y=y)) +
     geom_tile(aes(fill=z-273)) +
     my_fill +
-    geom_text_contour(aes(z=data_hgt$z),skip=3)+
+    geom_text_contour(aes(z=data_hgt$z),skip=3,stroke = 0.2)+
     stat_contour(data=data_hgt,aes(x=x,y=y,z=z),color="black",size=0.5,show.legend = TRUE) +
     geom_polygon(data=mapa,aes(x=long ,y=lat, group=group),fill=NA,color="black",size=0.2) +
     coord_fixed(1) +
     theme_minimal()+
-    theme(axis.text.x = element_blank(),axis.text.y = element_blank(),
-          axis.title.x = element_blank(),axis.title.y = element_blank()) +
+ 
     xlim(270,330) + ylim(-70,10) +
     ggtitle(paste(dias[j],"de Diciembre")) +
     xlab("Long") + ylab("Lat")
@@ -282,92 +198,71 @@ annotate_figure(p,top = text_grob("Campos de temperatura y altura geopotencial",
 ggsave("Campos_b.pdf")
 
 
-
-ggplot(data=data_temp,aes(x=x,y=y)) +
-  geom_tile(aes(fill=z-273)) +
-  my_fill +
-  stat_contour(data=data_hgt,aes(x=x,y=y,z=z),color="black",size=0.5,show.legend = TRUE) +
-  geom_text_contour(aes(z=data_hgt$z),skip=3,rotate = TRUE)+
-  geom_polygon(data=mapa,aes(x=long ,y=lat, group=group),fill=NA,color="black",size=0.2) +
-  coord_fixed(1) +
-   theme_minimal()+
-  theme(axis.text.x = element_blank(),axis.text.y = element_blank(),
-        axis.title.x = element_blank(),axis.title.y = element_blank()) +
-  xlim(270,330) + ylim(-70,10) +
-  ggtitle(paste(dias[j],"de Diciembre")) +
-  xlab("Longitud") + ylab("Latitud")
+#ACLARACION
+#Al guardar los campos en la lista se sobreescriben los numeros asociados a las 
+#isolineas de altura geopotencial. Esto puede deberse al procesamiento
+#interno de la funcion "geom_text_contour", el cual excede mis conociemientos.
 
 
 ######################################################################
 # Item d
 
-# Mendoza 32°53′00″S 68°50′00″O 
-# Buenos Aires 34°35′59″S 58°22′55″O
+#Busco las posiciones de latitud y longitud sean lo mas cercanas a mis valores
+BsAs_coor<-c(-34.5997,301.6181) #latitud negativa por ser HS
+Mend_coor<-c(-32.8833,291.1667)
+Puntos<-list(BsAs_coor,Mend_coor)
+names(Puntos)<-c("Buenos Aires","Mendoza")
 
-#convetidos 
-#32.88333333 S 68.83333333 o
-#34.59972222 s 58.38194444 o
-
-#Convertidos bien
-#32.88333333 S  291.1667
-#34.59972222 s  301.6181
-
-
-#Busco las posiciones de longitud y latitud sean lo mas cercanas a mis valores
-datos_dimensiones$lat
-
-#Creo matrices 
-
+#Creo matrices de latitud y longitud
 lat<-rep(datos_dimensiones$lat,each=length(datos_dimensiones$lon))
 matriz_lat<-matrix(lat,byrow = T,ncol = length(datos_dimensiones$lon))
 
 lon<-rep(datos_dimensiones$lon,length(datos_dimensiones$lat))
 matriz_lon<-matrix(lon,ncol=length(datos_dimensiones$lon),nrow = length(datos_dimensiones$lat),byrow = T)
 
-#le resto a ambas matrices los valores correspondientes de el punto BsAs
-a<-(matriz_lat-34.599)^2
-b<-(matriz_lon-301.6181)^2
+# Para cada punto calculo los valores de reticula mas cercanos y grafico
+for(k in 1:length(Puntos)) { #este ciclo esta hecho para que se puedan agragar mas puntos
+  
+  #Resto en ambas matrices los valores correspondientes 
+  a<-(matriz_lat-Puntos[[k]][1])^2
+  b<-(matriz_lon-Puntos[[k]][2])^2  
+  
+  #Calculo cuales son las latitudes y coordenadas mas cercanas a las reales
+  hipotenusa<-sqrt(a+b)
+  coordenadas<-arrayInd(which.min(hipotenusa),.dim = dim(matriz_lat))
+  
 
-#Calculo cuales son las latitudes y coordenadas mas cercanas a las reales
-hipotenusa<-sqrt(a+b)
-coordenadas<-arrayInd(which.min(hipotenusa),.dim = c(33,21))
-coordenadas
-
-hipotenusa[coordenadas]
-
-
-
-#me quedo con una lat, una long y el nivel 1000 por lo tanto solo tengo un vector
-#de 124 datos temporales
-
-#supongo que son dos graficos: uno de bs as y otro de mendoza
-
-#Me quedo con el punto de grilla
-BsAs<-temp[1,4,1,]
-BsAs<-matrix(BsAs,ncol = 4,nrow = 31)
-
-max_bsas<-apply(BsAs,1,max)-273
-max_bsas
-min_bsas<-apply(BsAs,1,min)-273
-
-#convertirlo a matrix 4 columnas y 31 filas y sacas maximos y min 
-#Calculo temperatura minima y maxima diaria
-
-
-
-data_bsas<-data.frame(Dias=1:31,Maximo=max_bsas,Minimo=min_bsas)
-data_bsas<-melt(data_bsas,id.vars = "Dias")
-
-
-#graficos de prueba
-ggplot(data = data_bsas,aes(x=Dias,y=value,col=variable)) +
-  geom_line() +
-  geom_point() +
-  theme_bw()+
-  scale_color_manual(values = c("red","blue"))+
-  ggtitle("Marcha diaria de Temperatura minima y maxima en Buenos Aires")+
-  ylab("Temperatura (C°)") + labs(color="")
-
-
+  #Al restringir a partir de una latitud, una longitud y el nivel 1000,solo tengo un vector
+  #de 124 datos temporales
+  
+  #Me quedo con el punto de grilla
+  Locacion<-temp[coordenadas[2],coordenadas[1],1,] #Longitud es la primer dimension 
+  
+  #Lo convierto a matriz para realizar los calculos diarios
+  Locacion<-matrix(Locacion,ncol = 4,nrow = 31)
+  
+  max<-apply(Locacion,1,max)-273
+  min<-apply(Locacion,1,min)-273
+  
+  #Ordenos los datos en un data frame
+  data_locacion<-data.frame(Dias=1:31,Maximo=max,Minimo=min)
+  data_locacion<-melt(data_locacion,id.vars = "Dias")
+  
+  
+  #Graficos 
+  ggplot(data = data_locacion,aes(x=Dias,y=value,col=variable)) +
+    geom_line() +
+    geom_point() +
+    theme_bw()+
+    scale_color_manual(values = c("red","blue"))+
+    ggtitle(paste("Marcha de temperatura minima y maxima en",names(Puntos)[k]))+
+    ylab("Temperatura (C°)") + labs(color="")
+  
+  
+  ggsave(paste("Marcha",names(Puntos)[k],".pdf",sep = ""))
+  
+  
+  
+}
 
 
